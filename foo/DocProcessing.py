@@ -3,15 +3,20 @@ import shutil
 #os函数
 import os
 
+#判断文件是否存在
 def check_file_path(path):
     if not os.path.exists(path):
-        print("找不到文件")
+        print("找不到文件 " + path)
         return 0
     return 1
 
 
 def Move_func(path):
+    #文件路径处理
     path = path.replace('\\','/')
+    path = path.replace('"','')
+    #path = os.path.join(path)
+    print(path)
     if check_file_path(path):
         #获取光影文件名
         Shaders_name = path.split("\\")[-1].replace('"', "")

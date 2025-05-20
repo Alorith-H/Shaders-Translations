@@ -1,8 +1,8 @@
-name: Summarize new issues
+name: 总结新建 Issue（中文）
 
 on:
   issues:
-    types: [opened]
+    types: [opened]  # 当有人创建新 Issue 时触发
 
 jobs:
   summary:
@@ -13,22 +13,28 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout repository
+      - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: Run AI inference
+      - name: 调用 AI 总结 Issue（中文）
         id: inference
         uses: actions/ai-inference@v1
         with:
           prompt: |
-            Summarize the following GitHub issue in one paragraph:
-            Title: ${{ github.event.issue.title }}
-            Body: ${{ github.event.issue.body }}
+            请用简洁的中文总结以下 GitHub Issue 的内容：
+            标题：${{ github.event.issue.title }}
+            正文：${{ github.event.issue.body }}
 
-      - name: Comment with AI summary
-        run: |
-          gh issue comment $ISSUE_NUMBER --body '${{ steps.inference.outputs.response }}'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          RESPONSE: ${{ steps.inference.outputs.response }}
+      - name: 使用 AI 结果发表评论（中文）
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `AI 总结如下（中文）：
+              
+${{ steps.inference.outputs.response }}`
+            })

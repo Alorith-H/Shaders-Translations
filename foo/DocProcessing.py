@@ -9,7 +9,15 @@ import zipfile
 #本地翻译
 import re
 from deep_translator import GoogleTranslator
+#缓存文件读写
+import json
 
+
+#全局变量
+Shaders_name_ = 'hello python - global'
+
+# 缓存文件路径，保存翻译过的文本及其译文，防止重复翻译
+CACHE_FILE = "./translation_cache.json"
 
 #判断文件是否存在
 def check_file_path(path):
@@ -20,6 +28,8 @@ def check_file_path(path):
 
 
 def Move_func(path):
+    #全局化文件名
+    global Shaders_name_
     #文件路径处理
     path = path.replace('\\','/')
     path = path.replace('"','')
@@ -28,6 +38,7 @@ def Move_func(path):
     if check_file_path(path):
         #获取光影文件名
         Shaders_name = path.split("/")[-1].replace('"', "")[:-4]
+        Shaders_name_ = Shaders_name
         print("文件名为：" + Shaders_name)
         # 定义源文件和目标文件的路径
         src_path = path
@@ -63,12 +74,12 @@ def File_read_func(Shaders_name):
         file.write('\n'.join(translated_lines))
 
     print("翻译完成并已写回原文件。")
-    zip_folder('./Temp/Zip', './Temp/Zip/' + Shaders_name + '_zh.zip')
+    zip_folder('./Temp/Zip', './Temp/' + Shaders_name + '_zh.zip')
     print("文件已压缩")
 
 
-
-
+#单行翻译原始代码
+'''
 def Translation_func(lines):
     translated_lines = []
     total = len(lines)
@@ -101,6 +112,122 @@ def Translation_func(lines):
             translated_lines.append(line)
 
     return translated_lines
+'''
+
+#改进后的翻译模块
+def load_cache():
+    """
+    从本地JSON文件加载翻译缓存。
+    如果缓存文件不存在或读取失败，返回空字典。
+    """
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载缓存文件失败: {e}")
+            return {}
+    else:
+        return {}
+
+def save_cache(cache):
+    """
+    将翻译缓存字典保存到本地JSON文件。
+    使用ensure_ascii=False保证中文不被转义，indent格式化输出。
+    """
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"保存缓存文件失败: {e}")
+
+def Translation_func(lines):
+    """
+    逐行翻译文本行列表，保留Minecraft格式颜色代码，使用本地缓存优化翻译效率。
+
+    参数:
+        lines (list[str]): 文件内容逐行文本列表。
+
+    返回:
+        list[str]: 翻译后文本列表。
+    """
+    translated_lines = []               # 存放翻译结果行
+    translation_cache = load_cache()    # 加载本地缓存，格式：{原文: 译文}
+    total = len(lines)                  # 总行数
+    translated_count = 0                # 已翻译行数计数
+    translator = GoogleTranslator(source='en', target='zh-CN')  # 初始化谷歌翻译器
+
+    for idx, line in enumerate(lines):
+        # 修复乱码，将错误字符替换成颜色符号 §
+        line = line.replace('搂', '§')
+
+        if '=' in line:
+            # 拆分为key=value形式
+            key, value = line.split('=', 1)
+            value = value.strip()
+
+            # 提取颜色代码及其在纯文本中的位置
+            color_positions = []  # [(index_in_text, '§x'), ...]
+            text_only = ''        # 去除颜色码后的纯文本
+            i = 0
+            while i < len(value):
+                if value[i] == '§' and i + 1 < len(value):
+                    # 记录颜色码位置（相对于纯文本的索引）
+                    color_positions.append((len(text_only), value[i:i+2]))
+                    i += 2
+                else:
+                    text_only += value[i]
+                    i += 1
+
+            # 尝试从缓存中读取翻译结果
+            if text_only in translation_cache:
+                translated_text = translation_cache[text_only]
+            else:
+                try:
+                    # 调用Google翻译API进行翻译
+                    translated_text = translator.translate(text_only)
+                    # 防止返回None异常
+                    if translated_text is None:
+                        raise ValueError("翻译返回了 None")
+                    # 缓存新翻译结果
+                    translation_cache[text_only] = translated_text
+                    # 每翻译一条就保存缓存，避免丢失
+                    save_cache(translation_cache)
+                except Exception as e:
+                    print(f"[{(idx + 1) / total * 100:.1f}%] 翻译出错: {e}")
+                    # 出错则保留原行，继续处理下一行
+                    translated_lines.append(line)
+                    continue
+
+            # 将颜色码重新插入翻译后的文本对应位置
+            try:
+                text_list = list(translated_text)
+                offset = 0
+                for pos, code in color_positions:
+                    # 计算插入位置，防止越界
+                    insert_pos = min(pos + offset, len(text_list))
+                    text_list.insert(insert_pos, code)
+                    offset += len(code)  # 插入后偏移量增加
+                rebuilt_text = ''.join(text_list)
+            except Exception as e:
+                print(f"[{(idx + 1) / total * 100:.1f}%] 颜色码插入出错: {e}")
+                rebuilt_text = translated_text  # 出错则使用纯翻译文本
+
+            # 组合成 key=翻译后的文本行
+            translated_line = f"{key.strip()}={rebuilt_text}"
+            translated_lines.append(translated_line)
+
+            translated_count += 1
+            percent = (translated_count / total) * 100
+            print(f"[{percent:.1f}%] 原文: {text_only} → 译文: {rebuilt_text}")
+        else:
+            # 不含等号的行原样保留（比如空行、注释等）
+            translated_lines.append(line)
+
+    # 最终保存缓存（防止未及时保存）
+    save_cache(translation_cache)
+
+    return translated_lines
 
 
 def zip_folder(folder_path, zip_path):
@@ -113,3 +240,14 @@ def zip_folder(folder_path, zip_path):
                 arcname = os.path.relpath(full_path, start=folder_path)
                 zipf.write(full_path, arcname)
     print(f"文件夹 {folder_path} 已压缩为 {zip_path}")
+    clean_temp_folder('./Temp/Zip')
+
+
+def clean_temp_folder(folder_path):
+    try:
+        shutil.rmtree(folder_path)
+        os.remove('./Temp/' + Shaders_name_ + '.zip')
+        print(f"临时文件夹 {folder_path} 已删除。")
+        print(f"临时文件夹 {Shaders_name_} 已删除。")
+    except Exception as e:
+        print(f"清理临时文件夹失败: {e}")

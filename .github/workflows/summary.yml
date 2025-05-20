@@ -21,7 +21,7 @@ jobs:
         uses: actions/ai-inference@v1
         with:
           prompt: |
-            使用一段简洁的中文总结issue内容:
+            使用一段简洁的中文总结issue内容并提出建议，项目使用python编写:
             Title: ${{ github.event.issue.title }}
             Body: ${{ github.event.issue.body }}
 

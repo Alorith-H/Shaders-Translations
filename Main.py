@@ -51,7 +51,7 @@ class Sidebar(ctk.CTkFrame):
         self.btn_theme.pack(side="bottom", fill="x", padx=20, pady=20)
 
     def show_about(self):
-        self.log_callback("此程序由 ChatGPT 助手制作，支持Minecraft光影包翻译。")
+        self.log_callback("By Alorith. 支持Minecraft光影包翻译。")
 
 class TranslatorApp(ctk.CTk):
     def __init__(self):

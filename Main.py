@@ -111,9 +111,11 @@ class TranslatorApp(ctk.CTk):
             self.log("未选择文件，操作取消。")
 
     def prompt_translator_choice(self):
+        self.log("程序会记录翻译历史以节约翻译时间。文件存储在translation_cache中")
         self.log("请选择翻译器:")
-        self.log("1. Google翻译")
-        self.log("2. 百度翻译")
+        self.log("1. Google翻译(需要VPN)")
+        self.log("2. 百度翻译(需提供API)")
+        self.log("3. MyMemory翻译(免费)")
         self.log("请输入对应数字后，点击发送。")
         self.waiting_for_translator_choice = True
         self.input_var.set("")
@@ -126,17 +128,24 @@ class TranslatorApp(ctk.CTk):
             if text == "1":
                 self.selected_translator = "google"
                 self.waiting_for_translator_choice = False
-                self.log("已选择Google翻译，开始翻译...")
-                self.input_var.set("")
+                self.log("已选择 Google 翻译，开始翻译...")
                 self.start_translation_thread(self.selected_file_path, "google")
+
             elif text == "2":
                 self.selected_translator = "baidu"
                 self.waiting_for_translator_choice = False
                 self.waiting_for_baidu_appid = True
-                self.log("已选择百度翻译。请输入百度翻译 APP ID：")
-                self.input_var.set("")
+                self.log("已选择 百度翻译。请输入百度翻译 APP ID：")
+
+            elif text == "3":
+                self.selected_translator = "mymemory"
+                self.waiting_for_translator_choice = False
+                self.log("已选择 MyMemory 翻译，开始翻译...")
+                self.start_translation_thread(self.selected_file_path, "mymemory")
+
             else:
-                self.log("输入无效，请输入 1 或 2。")
+                self.log("输入无效，请输入 1、2 或 3。")
+            self.input_var.set("")
             return
 
         if self.waiting_for_baidu_appid:
@@ -151,11 +160,11 @@ class TranslatorApp(ctk.CTk):
             self.baidu_config['secret_key'] = text
             self.waiting_for_baidu_secret = False
             self.log("百度翻译配置已保存，开始翻译...")
-            self.input_var.set("")
             self.start_translation_thread(self.selected_file_path, "baidu")
+            self.input_var.set("")
             return
 
-        # 非特殊输入时，允许输入文件路径直接开始
+        # 输入路径直接开始
         if text:
             if os.path.exists(text):
                 self.selected_file_path = text
@@ -172,14 +181,18 @@ class TranslatorApp(ctk.CTk):
 
     def translation_task(self, file_path, translator_type):
         try:
-            DocProcessing.Move_func(file_path, output_dir=self.output_dir, log=self.log,
-                                    translator_type=translator_type,
-                                    baidu_config=self.baidu_config if translator_type == "baidu" else None)
+            DocProcessing.Move_func(
+                file_path,
+                output_dir=self.output_dir,
+                log=self.log,
+                translator_type=translator_type,
+                baidu_config=self.baidu_config if translator_type == "baidu" else None
+            )
             self.log("🎉 翻译完成！")
         except Exception as e:
             self.log(f"❌ 翻译失败: {e}")
-
-        self.after(0, lambda: self.btn_translate.configure(state="normal"))
+        finally:
+            self.after(0, lambda: self.btn_translate.configure(state="normal"))
 
     def log(self, message):
         self.log_queue.put(message)
@@ -209,7 +222,6 @@ class TranslatorApp(ctk.CTk):
         new_theme = THEMES[self.theme_index]
         ctk.set_appearance_mode(new_theme)
         self.log(f"🌈 主题已切换到：{new_theme}")
-
         config = load_config()
         config["theme"] = new_theme
         save_config(config)

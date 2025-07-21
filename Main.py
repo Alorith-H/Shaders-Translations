@@ -51,6 +51,8 @@ class Sidebar(ctk.CTkFrame):
 
     def show_about(self):
         self.log_callback("By Alorith. 支持Minecraft光影包翻译。")
+        self.log_callback("邮箱：2835147611@qq.com")
+        self.log_callback("开源地址：https://github.com/Alorith-H/Shaders-Translations/tree/master")
 
 class TranslatorApp(ctk.CTk):
     def __init__(self):

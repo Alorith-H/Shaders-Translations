@@ -1,9 +1,8 @@
 import shutil
 import os
 import zipfile
-import re
-from deep_translator import GoogleTranslator
 import json
+from deep_translator import GoogleTranslator, BaiduTranslator
 
 CACHE_FILE = "./translation_cache.json"
 
@@ -31,7 +30,7 @@ def check_file_path(path):
         return False
     return True
 
-def Move_func(path, output_dir="./Temp", log=print, translator_type='google'):
+def Move_func(path, output_dir="./Temp", log=print, translator_type='google', baidu_config=None):
     path = path.replace('\\', '/').replace('"', '')
     log(f"输入路径: {path}")
 
@@ -50,9 +49,9 @@ def Move_func(path, output_dir="./Temp", log=print, translator_type='google'):
     shutil.copy(path, dst_path)
     log(f"复制文件到 {dst_path}")
 
-    Unzip_func(dst_path, shader_name, output_dir, log, translator_type)
+    Unzip_func(dst_path, shader_name, output_dir, log, translator_type, baidu_config)
 
-def Unzip_func(zip_path, shader_name, output_dir, log=print, translator_type='google'):
+def Unzip_func(zip_path, shader_name, output_dir, log=print, translator_type='google', baidu_config=None):
     extract_dir = os.path.join(output_dir, "Zip")
     if not os.path.exists(extract_dir):
         os.makedirs(extract_dir)
@@ -61,9 +60,9 @@ def Unzip_func(zip_path, shader_name, output_dir, log=print, translator_type='go
         zip_ref.extractall(extract_dir)
     log(f"解压完成: {extract_dir}")
 
-    File_read_func(shader_name, output_dir, log, translator_type)
+    File_read_func(shader_name, output_dir, log, translator_type, baidu_config)
 
-def File_read_func(shader_name, output_dir, log=print, translator_type='google'):
+def File_read_func(shader_name, output_dir, log=print, translator_type='google', baidu_config=None):
     lang_dir = os.path.join(output_dir, "Zip")
     target_file = None
 
@@ -89,7 +88,7 @@ def File_read_func(shader_name, output_dir, log=print, translator_type='google')
 
     log(f"读取语言文件，共 {len(lines)} 行")
 
-    translated_lines = Translation_func(lines, log, translator_type)
+    translated_lines = Translation_func(lines, log, translator_type, baidu_config)
 
     with open(target_file, 'w', encoding="utf-8") as f:
         f.write('\n'.join(translated_lines))
@@ -98,14 +97,24 @@ def File_read_func(shader_name, output_dir, log=print, translator_type='google')
     zip_out_path = os.path.join(output_dir, f"{shader_name}_zh.zip")
     zip_folder(os.path.join(output_dir, "Zip"), zip_out_path, log)
 
-def Translation_func(lines, log=print, translator_type='google'):
+def Translation_func(lines, log=print, translator_type='google', baidu_config=None):
     translated_lines = []
     translation_cache = load_cache()
     total = len(lines)
 
-    # 这里目前只支持 Google 翻译，后续可扩展
     if translator_type == 'google':
         translator = GoogleTranslator(source='en', target='zh-CN')
+    elif translator_type == 'baidu':
+        if not baidu_config or 'app_id' not in baidu_config or 'secret_key' not in baidu_config:
+            log("百度翻译配置缺失，使用Google翻译代替。")
+            translator = GoogleTranslator(source='en', target='zh-CN')
+        else:
+            translator = BaiduTranslator(
+                appid=baidu_config['app_id'],     # 注意这里是 appid
+                appkey=baidu_config['secret_key'], # 注意这里是 appkey
+                from_lang='en',
+                to_lang='zh'
+            )
     else:
         log(f"未知翻译器 {translator_type}，默认使用Google翻译")
         translator = GoogleTranslator(source='en', target='zh-CN')

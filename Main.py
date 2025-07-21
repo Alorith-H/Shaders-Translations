@@ -65,16 +65,28 @@ class TranslatorApp(ctk.CTk):
         self.sidebar = Sidebar(self, self.log)
         self.sidebar.pack(side="left", fill="y")
 
+        # 主区域垂直布局框架
         self.main_frame = ctk.CTkFrame(self)
         self.main_frame.pack(side="right", expand=True, fill="both", padx=10, pady=10)
 
-        self.log_box = ctk.CTkTextbox(self.main_frame, width=600, height=400, font=ctk.CTkFont(size=14))
-        self.log_box.pack(expand=True, fill="both")
+        # 日志框，填满主框架上方大部分区域
+        self.log_box = ctk.CTkTextbox(self.main_frame, font=ctk.CTkFont(size=14))
+        self.log_box.pack(side="top", expand=True, fill="both", pady=(0,10))
 
-        self.btn_translate = ctk.CTkButton(self.main_frame, text="开始翻译", command=self.start_translation_thread)
-        self.btn_translate.pack(pady=10)
+        # 底部输入区域，水平布局：输入框 + 按钮
+        bottom_frame = ctk.CTkFrame(self.main_frame)
+        bottom_frame.pack(side="bottom", fill="x")
+
+        self.input_var = ctk.StringVar()
+        self.entry = ctk.CTkEntry(bottom_frame, textvariable=self.input_var, placeholder_text="请输入光影包路径或留空选择文件")
+        self.entry.pack(side="left", expand=True, fill="x", padx=(0, 10))
+
+        self.btn_translate = ctk.CTkButton(bottom_frame, text="开始翻译", width=100, command=self.on_button_click)
+        self.btn_translate.pack(side="right")
 
         self.after(100, self.update_log_from_queue)
+
+        self.input_var.trace_add("write", self.on_input_change)
 
         # 加载配置（主题和输出目录）
         config = load_config()
@@ -86,6 +98,23 @@ class TranslatorApp(ctk.CTk):
 
         self.output_dir = config.get("output_dir", "./Temp")
         self.log(f"当前输出目录: {self.output_dir}")
+
+    def on_input_change(self, *args):
+        text = self.input_var.get().strip()
+        if text:
+            self.btn_translate.configure(text="发送")
+        else:
+            self.btn_translate.configure(text="开始翻译")
+
+    def on_button_click(self):
+        text = self.input_var.get().strip()
+        if text:
+            if os.path.exists(text):
+                self.start_translation_thread(file_path=text)
+            else:
+                self.log("输入路径无效，请选择有效文件。")
+        else:
+            self.start_translation_thread()
 
     def log(self, message: str):
         self.log_queue.put(message)
@@ -112,12 +141,13 @@ class TranslatorApp(ctk.CTk):
             config["output_dir"] = self.output_dir
             save_config(config)
 
-    def start_translation_thread(self):
+    def start_translation_thread(self, file_path=None):
         self.btn_translate.configure(state="disabled")  # 禁用按钮
-        threading.Thread(target=self.translation_task, daemon=True).start()
+        threading.Thread(target=self.translation_task, args=(file_path,), daemon=True).start()
 
-    def translation_task(self):
-        file_path = filedialog.askopenfilename(title="选择光影包ZIP文件", filetypes=[("ZIP 文件", "*.zip")])
+    def translation_task(self, file_path=None):
+        if not file_path:
+            file_path = filedialog.askopenfilename(title="选择光影包ZIP文件", filetypes=[("ZIP 文件", "*.zip")])
         if file_path:
             self.log(f"选择文件：{file_path}")
             DocProcessing.Move_func(file_path, output_dir=self.output_dir, log=self.log)

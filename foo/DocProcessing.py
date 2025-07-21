@@ -1,9 +1,8 @@
 import shutil
 import os
 import zipfile
-import re
-from deep_translator import GoogleTranslator
 import json
+from deep_translator import GoogleTranslator, BaiduTranslator, MyMemoryTranslator
 
 CACHE_FILE = "./translation_cache.json"
 
@@ -15,8 +14,7 @@ def load_cache():
         except Exception as e:
             print(f"加载缓存文件失败: {e}")
             return {}
-    else:
-        return {}
+    return {}
 
 def save_cache(cache):
     try:
@@ -31,7 +29,7 @@ def check_file_path(path):
         return False
     return True
 
-def Move_func(path, output_dir="./Temp", log=print):
+def Move_func(path, output_dir="./Temp", log=print, translator_type='google', baidu_config=None):
     path = path.replace('\\', '/').replace('"', '')
     log(f"输入路径: {path}")
 
@@ -50,9 +48,9 @@ def Move_func(path, output_dir="./Temp", log=print):
     shutil.copy(path, dst_path)
     log(f"复制文件到 {dst_path}")
 
-    Unzip_func(dst_path, shader_name, output_dir, log)
+    Unzip_func(dst_path, shader_name, output_dir, log, translator_type, baidu_config)
 
-def Unzip_func(zip_path, shader_name, output_dir, log=print):
+def Unzip_func(zip_path, shader_name, output_dir, log=print, translator_type='google', baidu_config=None):
     extract_dir = os.path.join(output_dir, "Zip")
     if not os.path.exists(extract_dir):
         os.makedirs(extract_dir)
@@ -61,9 +59,9 @@ def Unzip_func(zip_path, shader_name, output_dir, log=print):
         zip_ref.extractall(extract_dir)
     log(f"解压完成: {extract_dir}")
 
-    File_read_func(shader_name, output_dir, log)
+    File_read_func(shader_name, output_dir, log, translator_type, baidu_config)
 
-def File_read_func(shader_name, output_dir, log=print):
+def File_read_func(shader_name, output_dir, log=print, translator_type='google', baidu_config=None):
     lang_dir = os.path.join(output_dir, "Zip")
     target_file = None
 
@@ -89,7 +87,7 @@ def File_read_func(shader_name, output_dir, log=print):
 
     log(f"读取语言文件，共 {len(lines)} 行")
 
-    translated_lines = Translation_func(lines, log)
+    translated_lines = Translation_func(lines, log, translator_type, baidu_config)
 
     with open(target_file, 'w', encoding="utf-8") as f:
         f.write('\n'.join(translated_lines))
@@ -98,18 +96,39 @@ def File_read_func(shader_name, output_dir, log=print):
     zip_out_path = os.path.join(output_dir, f"{shader_name}_zh.zip")
     zip_folder(os.path.join(output_dir, "Zip"), zip_out_path, log)
 
-def Translation_func(lines, log=print):
+def Translation_func(lines, log=print, translator_type='google', baidu_config=None):
     translated_lines = []
     translation_cache = load_cache()
     total = len(lines)
-    translator = GoogleTranslator(source='en', target='zh-CN')
 
+    # 选择翻译器
+    if translator_type == 'google':
+        translator = GoogleTranslator(source='en', target='zh-CN')
+    elif translator_type == 'baidu':
+        if not baidu_config or 'app_id' not in baidu_config or 'secret_key' not in baidu_config:
+            log("百度翻译配置缺失，使用 Google 翻译 代替。")
+            translator = GoogleTranslator(source='en', target='zh-CN')
+        else:
+            translator = BaiduTranslator(
+                appid=baidu_config['app_id'],
+                appkey=baidu_config['secret_key'],
+                from_lang='en',
+                to_lang='zh'
+            )
+    elif translator_type == 'mymemory':
+        translator = MyMemoryTranslator(source='en-US', target='zh-CN')
+    else:
+        log(f"未知翻译器 {translator_type}，默认使用 Google 翻译")
+        translator = GoogleTranslator(source='en', target='zh-CN')
+
+    # 主翻译循环
     for idx, line in enumerate(lines):
-        line = line.replace('搂', '§')  # 修复乱码
+        line = line.replace('搂', '§')  # 修复可能的乱码
         if '=' in line:
             key, value = line.split('=', 1)
             value = value.strip()
 
+            # 提取并记录颜色码位置
             color_positions = []
             text_only = ''
             i = 0
@@ -121,13 +140,14 @@ def Translation_func(lines, log=print):
                     text_only += value[i]
                     i += 1
 
+            # 缓存查找或 API 翻译
             if text_only in translation_cache:
                 translated_text = translation_cache[text_only]
             else:
                 try:
                     translated_text = translator.translate(text_only)
                     if translated_text is None:
-                        raise ValueError("翻译返回None")
+                        raise ValueError("翻译返回 None")
                     translation_cache[text_only] = translated_text
                     save_cache(translation_cache)
                 except Exception as e:
@@ -135,6 +155,7 @@ def Translation_func(lines, log=print):
                     translated_lines.append(line)
                     continue
 
+            # 将颜色码插回译文
             try:
                 text_list = list(translated_text)
                 offset = 0
@@ -153,6 +174,7 @@ def Translation_func(lines, log=print):
         else:
             translated_lines.append(line)
 
+    # 最终保存缓存
     save_cache(translation_cache)
     return translated_lines
 
@@ -169,9 +191,6 @@ def zip_folder(folder_path, zip_path, log=print):
 def clean_temp_folder(folder_path, base_output_dir, log=print):
     try:
         shutil.rmtree(folder_path)
-        zip_file = os.path.join(base_output_dir, os.path.basename(base_output_dir) + ".zip")
-        if os.path.exists(zip_file):
-            os.remove(zip_file)
-        log(f"临时文件夹 {folder_path} 和临时文件已删除。")
+        log(f"临时文件夹 {folder_path} 已删除。")
     except Exception as e:
         log(f"清理临时文件夹失败: {e}")

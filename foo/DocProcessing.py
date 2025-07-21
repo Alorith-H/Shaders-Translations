@@ -50,6 +50,14 @@ def Move_func(path, output_dir="./Temp", log=print, translator_type='google', ba
 
     Unzip_func(dst_path, shader_name, output_dir, log, translator_type, baidu_config)
 
+    # 删除复制的原始ZIP文件，保留翻译后的输出包
+    try:
+        if os.path.exists(dst_path):
+            os.remove(dst_path)
+            log(f"删除临时复制的文件: {dst_path}")
+    except Exception as e:
+        log(f"删除临时复制文件失败: {e}")
+
 def Unzip_func(zip_path, shader_name, output_dir, log=print, translator_type='google', baidu_config=None):
     extract_dir = os.path.join(output_dir, "Zip")
     if not os.path.exists(extract_dir):

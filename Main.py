@@ -115,7 +115,7 @@ class TranslatorApp(ctk.CTk):
     def prompt_translator_choice(self):
         self.log("程序会记录翻译历史以节约翻译时间。文件存储在translation_cache中")
         self.log("请选择翻译器:")
-        self.log("1. Google翻译(需要VPN)")
+        self.log("1. Google翻译(翻译速度快，需要VPN)")
         self.log("2. 百度翻译(需提供API)")
         self.log("3. MyMemory翻译(免费)")
         self.log("请输入对应数字后，点击发送。")

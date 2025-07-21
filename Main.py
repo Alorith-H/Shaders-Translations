@@ -6,7 +6,6 @@ import json
 import os
 from foo import DocProcessing
 
-# 主题选项列表
 THEMES = ["dark", "light", "system"]
 CONFIG_FILE = "config.json"
 
@@ -38,13 +37,15 @@ class Sidebar(ctk.CTkFrame):
         self.btn_select = ctk.CTkButton(self, text="选择光影包", command=master.start_translation_thread)
         self.btn_select.pack(fill="x", padx=20, pady=10)
 
+        self.btn_output_dir = ctk.CTkButton(self, text="选择输出目录", command=master.select_output_directory)
+        self.btn_output_dir.pack(fill="x", padx=20, pady=10)
+
         self.btn_clear_log = ctk.CTkButton(self, text="清空日志", command=master.clear_log)
         self.btn_clear_log.pack(fill="x", padx=20, pady=10)
 
         self.btn_about = ctk.CTkButton(self, text="关于", command=self.show_about)
         self.btn_about.pack(fill="x", padx=20, pady=10)
 
-        # 主题切换按钮固定底部
         self.btn_theme = ctk.CTkButton(self, text="切换主题", command=master.cycle_theme)
         self.btn_theme.pack(side="bottom", fill="x", padx=20, pady=20)
 
@@ -74,13 +75,17 @@ class TranslatorApp(ctk.CTk):
 
         self.after(100, self.update_log_from_queue)
 
-        # 读取并应用保存的主题配置
+        # 读取保存的主题配置，设置默认主题
         config = load_config()
-        saved_theme = config.get("theme", "system")
+        saved_theme = config.get("theme", "dark")
         if saved_theme not in THEMES:
-            saved_theme = "system"
+            saved_theme = "dark"
         ctk.set_appearance_mode(saved_theme)
         self.theme_index = THEMES.index(saved_theme)
+
+        # 读取输出目录，默认 ./Temp
+        self.output_dir = config.get("output_dir", "./Temp")
+        self.log(f"当前输出目录: {self.output_dir}")
 
     def log(self, message: str):
         self.log_queue.put(message)
@@ -96,6 +101,17 @@ class TranslatorApp(ctk.CTk):
         self.log_box.delete("0.0", "end")
         self.log("日志已清空。")
 
+    def select_output_directory(self):
+        selected_dir = filedialog.askdirectory(title="选择输出目录")
+        if selected_dir:
+            self.output_dir = selected_dir
+            self.log(f"输出目录已设置为：{self.output_dir}")
+
+            # 保存配置
+            config = load_config()
+            config["output_dir"] = self.output_dir
+            save_config(config)
+
     def start_translation_thread(self):
         threading.Thread(target=self.translation_task, daemon=True).start()
 
@@ -103,7 +119,8 @@ class TranslatorApp(ctk.CTk):
         file_path = filedialog.askopenfilename(title="选择光影包ZIP文件", filetypes=[("ZIP 文件", "*.zip")])
         if file_path:
             self.log(f"选择文件：{file_path}")
-            DocProcessing.Move_func(file_path, log=self.log)
+            # 传递输出目录给Move_func，记得你DocProcessing里对应修改函数签名和内部逻辑
+            DocProcessing.Move_func(file_path, output_dir=self.output_dir, log=self.log)
             self.log("🎉 翻译完成！")
 
     def cycle_theme(self):
@@ -118,8 +135,7 @@ class TranslatorApp(ctk.CTk):
         save_config(config)
 
 if __name__ == "__main__":
-    # 你可以改这里的默认主题
-    ctk.set_appearance_mode("dark")
+    ctk.set_appearance_mode("dark")  # 默认黑色主题
     ctk.set_default_color_theme("blue")
     app = TranslatorApp()
     app.mainloop()

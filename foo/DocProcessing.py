@@ -1,87 +1,106 @@
-# DocProcessing.py（精简示例）
-import os
 import shutil
+import os
 import zipfile
-import json
 import re
 from deep_translator import GoogleTranslator
+import json
 
+# 缓存文件名不变，放当前目录
 CACHE_FILE = "./translation_cache.json"
-Shaders_name_ = ''
-
-def Move_func(path, log=print):
-    global Shaders_name_
-    path = path.replace('\\','/').replace('"','')
-    log(f"📄 读取路径: {path}")
-
-    if not os.path.exists(path):
-        log(f"❌ 文件不存在: {path}")
-        return
-
-    Shaders_name = os.path.basename(path)[:-4]
-    Shaders_name_ = Shaders_name
-    log(f"📦 文件名: {Shaders_name}")
-
-    dst = "./Temp/"
-    os.makedirs(dst, exist_ok=True)
-    shutil.copy(path, dst)
-    log("✅ 复制文件完成")
-
-    Unzip_func(path, Shaders_name, log)
-
-def Unzip_func(path, Shaders_name, log=print):
-    with zipfile.ZipFile(path, 'r') as zip_ref:
-        zip_ref.extractall('./Temp/Zip')
-        log("🗜️ 解压完成")
-    File_read_func(Shaders_name, log)
-
-def File_read_func(Shaders_name, log=print):
-    lang_path = "./Temp/Zip/shaders/lang/en_US.lang"
-    if not os.path.exists(lang_path):
-        log("❌ 找不到语言文件")
-        return
-
-    with open(lang_path, 'r', encoding="utf-8") as f:
-        lines = f.readlines()
-    log(f"📖 读取 {len(lines)} 行")
-
-    translated = Translation_func(lines, log)
-
-    with open(lang_path, 'w', encoding="utf-8") as f:
-        f.write('\n'.join(translated))
-    log("✅ 写回翻译文件完成")
-
-    zip_folder('./Temp/Zip', f'./Temp/{Shaders_name}_zh.zip', log)
 
 def load_cache():
     if os.path.exists(CACHE_FILE):
         try:
-            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception as e:
+            print(f"加载缓存文件失败: {e}")
             return {}
-    return {}
+    else:
+        return {}
 
 def save_cache(cache):
     try:
-        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
-    except:
-        pass
+    except Exception as e:
+        print(f"保存缓存文件失败: {e}")
+
+def check_file_path(path):
+    if not os.path.exists(path):
+        print("找不到文件 " + path)
+        return False
+    return True
+
+def Move_func(path, output_dir="./Temp", log=print):
+    # 处理路径格式，去除引号，反斜杠换斜杠
+    path = path.replace('\\', '/').replace('"', '')
+    log(f"输入路径: {path}")
+
+    if not check_file_path(path):
+        log(f"文件不存在: {path}")
+        return
+
+    # 获取光影包文件名（不含扩展名）
+    shader_name = os.path.splitext(os.path.basename(path))[0]
+    log(f"光影包名: {shader_name}")
+
+    # 确保输出目录存在
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        log(f"创建输出目录: {output_dir}")
+
+    # 复制光影包zip到输出目录
+    dst_path = os.path.join(output_dir, os.path.basename(path))
+    shutil.copy(path, dst_path)
+    log(f"复制文件到 {dst_path}")
+
+    # 解压翻译处理
+    Unzip_func(dst_path, shader_name, output_dir, log)
+
+def Unzip_func(zip_path, shader_name, output_dir, log=print):
+    extract_dir = os.path.join(output_dir, "Zip")
+    if not os.path.exists(extract_dir):
+        os.makedirs(extract_dir)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(extract_dir)
+    log(f"解压完成: {extract_dir}")
+
+    File_read_func(shader_name, output_dir, log)
+
+def File_read_func(shader_name, output_dir, log=print):
+    lang_path = os.path.join(output_dir, "Zip", "shaders", "lang", "en_US.lang")
+    if not os.path.exists(lang_path):
+        log(f"语言文件不存在: {lang_path}")
+        return
+
+    with open(lang_path, 'r', encoding="utf-8") as f:
+        lines = f.readlines()
+    log(f"读取语言文件，共 {len(lines)} 行")
+
+    translated_lines = Translation_func(lines, log)
+
+    with open(lang_path, 'w', encoding="utf-8") as f:
+        f.write('\n'.join(translated_lines))
+    log("翻译完成，写回语言文件。")
+
+    zip_out_path = os.path.join(output_dir, f"{shader_name}_zh.zip")
+    zip_folder(os.path.join(output_dir, "Zip"), zip_out_path, log)
 
 def Translation_func(lines, log=print):
     translated_lines = []
-    cache = load_cache()
-    translator = GoogleTranslator(source='en', target='zh-CN')
+    translation_cache = load_cache()
     total = len(lines)
-    count = 0
+    translator = GoogleTranslator(source='en', target='zh-CN')
 
     for idx, line in enumerate(lines):
-        line = line.replace('搂', '§')
+        line = line.replace('搂', '§')  # 修复乱码
         if '=' in line:
             key, value = line.split('=', 1)
             value = value.strip()
 
+            # 提取颜色码及位置
             color_positions = []
             text_only = ''
             i = 0
@@ -93,20 +112,21 @@ def Translation_func(lines, log=print):
                     text_only += value[i]
                     i += 1
 
-            if text_only in cache:
-                translated_text = cache[text_only]
+            if text_only in translation_cache:
+                translated_text = translation_cache[text_only]
             else:
                 try:
                     translated_text = translator.translate(text_only)
                     if translated_text is None:
-                        raise ValueError("翻译返回 None")
-                    cache[text_only] = translated_text
-                    save_cache(cache)
+                        raise ValueError("翻译返回None")
+                    translation_cache[text_only] = translated_text
+                    save_cache(translation_cache)
                 except Exception as e:
-                    log(f"❌ 翻译第 {idx+1} 行失败: {e}")
+                    log(f"[{(idx + 1) / total * 100:.1f}%] 翻译错误: {e}")
                     translated_lines.append(line)
                     continue
 
+            # 插回颜色码
             try:
                 text_list = list(translated_text)
                 offset = 0
@@ -114,23 +134,37 @@ def Translation_func(lines, log=print):
                     insert_pos = min(pos + offset, len(text_list))
                     text_list.insert(insert_pos, code)
                     offset += len(code)
-                rebuilt = ''.join(text_list)
-            except:
-                rebuilt = translated_text
+                rebuilt_text = ''.join(text_list)
+            except Exception as e:
+                log(f"[{(idx + 1) / total * 100:.1f}%] 颜色码插入错误: {e}")
+                rebuilt_text = translated_text
 
-            translated_lines.append(f"{key.strip()}={rebuilt}")
-            count += 1
-            log(f"✅ 已翻译 {count}/{total} 行: {text_only} → {rebuilt}")
+            translated_line = f"{key.strip()}={rebuilt_text}"
+            translated_lines.append(translated_line)
+            log(f"[{(idx + 1) / total * 100:.1f}%] {text_only} → {rebuilt_text}")
         else:
             translated_lines.append(line)
 
+    save_cache(translation_cache)
     return translated_lines
 
 def zip_folder(folder_path, zip_path, log=print):
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(folder_path):
             for file in files:
-                full = os.path.join(root, file)
-                arcname = os.path.relpath(full, folder_path)
-                zipf.write(full, arcname)
-    log(f"✅ 已压缩为: {zip_path}")
+                full_path = os.path.join(root, file)
+                arcname = os.path.relpath(full_path, start=folder_path)
+                zipf.write(full_path, arcname)
+    log(f"压缩完成: {zip_path}")
+    clean_temp_folder(folder_path, os.path.dirname(zip_path), log)
+
+def clean_temp_folder(folder_path, base_output_dir, log=print):
+    try:
+        shutil.rmtree(folder_path)
+        # 删除复制的zip文件（如果你想保留可以注释掉下面两行）
+        zip_file = os.path.join(base_output_dir, os.path.basename(base_output_dir) + ".zip")
+        if os.path.exists(zip_file):
+            os.remove(zip_file)
+        log(f"临时文件夹 {folder_path} 和临时文件已删除。")
+    except Exception as e:
+        log(f"清理临时文件夹失败: {e}")

@@ -31,7 +31,7 @@ def check_file_path(path):
         return False
     return True
 
-def Move_func(path, output_dir="./Temp", log=print):
+def Move_func(path, output_dir="./Temp", log=print, translator_type='google'):
     path = path.replace('\\', '/').replace('"', '')
     log(f"输入路径: {path}")
 
@@ -50,9 +50,9 @@ def Move_func(path, output_dir="./Temp", log=print):
     shutil.copy(path, dst_path)
     log(f"复制文件到 {dst_path}")
 
-    Unzip_func(dst_path, shader_name, output_dir, log)
+    Unzip_func(dst_path, shader_name, output_dir, log, translator_type)
 
-def Unzip_func(zip_path, shader_name, output_dir, log=print):
+def Unzip_func(zip_path, shader_name, output_dir, log=print, translator_type='google'):
     extract_dir = os.path.join(output_dir, "Zip")
     if not os.path.exists(extract_dir):
         os.makedirs(extract_dir)
@@ -61,9 +61,9 @@ def Unzip_func(zip_path, shader_name, output_dir, log=print):
         zip_ref.extractall(extract_dir)
     log(f"解压完成: {extract_dir}")
 
-    File_read_func(shader_name, output_dir, log)
+    File_read_func(shader_name, output_dir, log, translator_type)
 
-def File_read_func(shader_name, output_dir, log=print):
+def File_read_func(shader_name, output_dir, log=print, translator_type='google'):
     lang_dir = os.path.join(output_dir, "Zip")
     target_file = None
 
@@ -89,7 +89,7 @@ def File_read_func(shader_name, output_dir, log=print):
 
     log(f"读取语言文件，共 {len(lines)} 行")
 
-    translated_lines = Translation_func(lines, log)
+    translated_lines = Translation_func(lines, log, translator_type)
 
     with open(target_file, 'w', encoding="utf-8") as f:
         f.write('\n'.join(translated_lines))
@@ -98,11 +98,17 @@ def File_read_func(shader_name, output_dir, log=print):
     zip_out_path = os.path.join(output_dir, f"{shader_name}_zh.zip")
     zip_folder(os.path.join(output_dir, "Zip"), zip_out_path, log)
 
-def Translation_func(lines, log=print):
+def Translation_func(lines, log=print, translator_type='google'):
     translated_lines = []
     translation_cache = load_cache()
     total = len(lines)
-    translator = GoogleTranslator(source='en', target='zh-CN')
+
+    # 这里目前只支持 Google 翻译，后续可扩展
+    if translator_type == 'google':
+        translator = GoogleTranslator(source='en', target='zh-CN')
+    else:
+        log(f"未知翻译器 {translator_type}，默认使用Google翻译")
+        translator = GoogleTranslator(source='en', target='zh-CN')
 
     for idx, line in enumerate(lines):
         line = line.replace('搂', '§')  # 修复乱码

@@ -46,7 +46,6 @@ class Sidebar(ctk.CTkFrame):
         self.btn_about = ctk.CTkButton(self, text="关于", command=self.show_about)
         self.btn_about.pack(fill="x", padx=20, pady=10)
 
-        # 主题切换按钮放侧边栏底部
         self.btn_theme = ctk.CTkButton(self, text="切换主题", command=master.cycle_theme)
         self.btn_theme.pack(side="bottom", fill="x", padx=20, pady=20)
 
@@ -65,15 +64,12 @@ class TranslatorApp(ctk.CTk):
         self.sidebar = Sidebar(self, self.log)
         self.sidebar.pack(side="left", fill="y")
 
-        # 主区域垂直布局框架
         self.main_frame = ctk.CTkFrame(self)
         self.main_frame.pack(side="right", expand=True, fill="both", padx=10, pady=10)
 
-        # 日志框，填满主框架上方大部分区域
         self.log_box = ctk.CTkTextbox(self.main_frame, font=ctk.CTkFont(size=14))
         self.log_box.pack(side="top", expand=True, fill="both", pady=(0,10))
 
-        # 底部输入区域，水平布局：输入框 + 按钮
         bottom_frame = ctk.CTkFrame(self.main_frame)
         bottom_frame.pack(side="bottom", fill="x")
 
@@ -88,7 +84,11 @@ class TranslatorApp(ctk.CTk):
 
         self.input_var.trace_add("write", self.on_input_change)
 
-        # 加载配置（主题和输出目录）
+        # 新增状态，等待用户输入翻译器选择
+        self.waiting_for_translator_choice = False
+        self.selected_file_path = None
+        self.selected_translator = "google"
+
         config = load_config()
         saved_theme = config.get("theme", "dark")
         if saved_theme not in THEMES:
@@ -108,13 +108,25 @@ class TranslatorApp(ctk.CTk):
 
     def on_button_click(self):
         text = self.input_var.get().strip()
-        if text:
-            if os.path.exists(text):
-                self.start_translation_thread(file_path=text)
+        if self.waiting_for_translator_choice:
+            if text == "1":
+                self.selected_translator = "google"
             else:
-                self.log("输入路径无效，请选择有效文件。")
+                self.log("输入无效，请输入有效数字对应翻译器。")
+                return
+
+            self.log(f"已选择翻译器：{self.selected_translator}，开始翻译...")
+            self.waiting_for_translator_choice = False
+            self.input_var.set("")
+            self.start_translation_thread(file_path=self.selected_file_path, translator_type=self.selected_translator)
         else:
-            self.start_translation_thread()
+            if text:
+                if os.path.exists(text):
+                    self.start_translation_thread(file_path=text)
+                else:
+                    self.log("输入路径无效，请选择有效文件。")
+            else:
+                self.start_translation_thread()
 
     def log(self, message: str):
         self.log_queue.put(message)
@@ -136,26 +148,38 @@ class TranslatorApp(ctk.CTk):
             self.output_dir = selected_dir
             self.log(f"输出目录已设置为：{self.output_dir}")
 
-            # 保存配置
             config = load_config()
             config["output_dir"] = self.output_dir
             save_config(config)
 
-    def start_translation_thread(self, file_path=None):
-        self.btn_translate.configure(state="disabled")  # 禁用按钮
-        threading.Thread(target=self.translation_task, args=(file_path,), daemon=True).start()
+    def start_translation_thread(self, file_path=None, translator_type=None):
+        if translator_type is not None:
+            self.btn_translate.configure(state="disabled")
+            threading.Thread(target=self.translation_task, args=(file_path, translator_type), daemon=True).start()
+        else:
+            if not file_path:
+                file_path = filedialog.askopenfilename(title="选择光影包ZIP文件", filetypes=[("ZIP 文件", "*.zip")])
+            if file_path:
+                self.selected_file_path = file_path
+                self.log(f"选择文件：{file_path}")
+                self.log("请选择翻译器:")
+                self.log("1. Google翻译")
+                self.log("请输入对应数字后，点击发送开始翻译。")
+                self.waiting_for_translator_choice = True
+            else:
+                self.log("未选择文件，操作取消。")
 
-    def translation_task(self, file_path=None):
-        if not file_path:
-            file_path = filedialog.askopenfilename(title="选择光影包ZIP文件", filetypes=[("ZIP 文件", "*.zip")])
+    def translation_task(self, file_path=None, translator_type="google"):
         if file_path:
-            self.log(f"选择文件：{file_path}")
-            DocProcessing.Move_func(file_path, output_dir=self.output_dir, log=self.log)
-            self.log("🎉 翻译完成！")
+            try:
+                DocProcessing.Move_func(file_path, output_dir=self.output_dir, log=self.log, translator_type=translator_type)
+                self.log("🎉 翻译完成！")
+            except Exception as e:
+                self.log(f"❌ 翻译失败: {e}")
         else:
             self.log("未选择文件，操作取消。")
 
-        self.btn_translate.configure(state="normal")  # 恢复按钮可用
+        self.after(0, lambda: self.btn_translate.configure(state="normal"))
 
     def cycle_theme(self):
         self.theme_index = (self.theme_index + 1) % len(THEMES)
@@ -163,13 +187,12 @@ class TranslatorApp(ctk.CTk):
         ctk.set_appearance_mode(new_theme)
         self.log(f"🌈 主题已切换到：{new_theme}")
 
-        # 保存配置
         config = load_config()
         config["theme"] = new_theme
         save_config(config)
 
 if __name__ == "__main__":
-    ctk.set_appearance_mode("dark")  # 默认黑色主题
+    ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
     app = TranslatorApp()
     app.mainloop()
